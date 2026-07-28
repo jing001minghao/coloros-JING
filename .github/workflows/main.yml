@@ -28,6 +28,9 @@ jobs:
           python3 -c "import zipfile; zipfile.ZipFile('cmdtools.zip').extractall('$HOME/android-sdk/cmdline-tools')"
           mv "$HOME/android-sdk/cmdline-tools/cmdline-tools" "$HOME/android-sdk/cmdline-tools/latest"
 
+          # Python zipfile 不保留可执行位，必须手动补
+          chmod -R +x "$HOME/android-sdk/cmdline-tools/latest/bin/"
+
           export PATH="$HOME/android-sdk/cmdline-tools/latest/bin:$HOME/android-sdk/platform-tools:$PATH"
           export ANDROID_HOME="$HOME/android-sdk"
           echo "ANDROID_HOME=$HOME/android-sdk" >> "$GITHUB_ENV"
@@ -42,6 +45,8 @@ jobs:
           cd /tmp
           curl -sL "https://services.gradle.org/distributions/gradle-8.10.2-bin.zip" -o gradle.zip
           python3 -c "import zipfile; zipfile.ZipFile('gradle.zip').extractall('$HOME/')"
+
+          chmod -R +x "$HOME/gradle-8.10.2/bin/"
 
           export PATH="$HOME/gradle-8.10.2/bin:$PATH"
           echo "$HOME/gradle-8.10.2/bin" >> "$GITHUB_PATH"
