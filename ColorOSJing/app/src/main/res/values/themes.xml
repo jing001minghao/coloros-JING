@@ -1,0 +1,4 @@
+<resources>
+    <!-- Compose 自行绘制 UI，Activity 主题只需无 ActionBar 的浅色主题 -->
+    <style name="Theme.ColorOSJing" parent="android:Theme.Material.Light.NoActionBar" />
+</resources>
