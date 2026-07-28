@@ -22,24 +22,23 @@ jobs:
 
       - name: 安装 Android SDK
         run: |
-          set -e
-          sudo mkdir -p /opt/android-sdk/cmdline-tools
+          mkdir -p "$HOME/android-sdk/cmdline-tools"
           cd /tmp
-          wget -q "https://dl.google.com/android/repository/commandlinetools-linux-13114758_latest.zip" -O cmdtools.zip
-          sudo unzip -q cmdtools.zip -d /opt/android-sdk/cmdline-tools
-          sudo mv /opt/android-sdk/cmdline-tools/cmdline-tools /opt/android-sdk/cmdline-tools/latest
-          echo "ANDROID_HOME=/opt/android-sdk" >> $GITHUB_ENV
-          echo "/opt/android-sdk/cmdline-tools/latest/bin" >> $GITHUB_PATH
-          echo "/opt/android-sdk/platform-tools" >> $GITHUB_PATH
+          curl -sL "https://dl.google.com/android/repository/commandlinetools-linux-13114758_latest.zip" -o cmdtools.zip
+          python3 -c "import zipfile; zipfile.ZipFile('cmdtools.zip').extractall('$HOME/android-sdk/cmdline-tools')"
+          mv "$HOME/android-sdk/cmdline-tools/cmdline-tools" "$HOME/android-sdk/cmdline-tools/latest"
+          echo "ANDROID_HOME=$HOME/android-sdk" >> "$GITHUB_ENV"
+          echo "$HOME/android-sdk/cmdline-tools/latest/bin" >> "$GITHUB_PATH"
+          echo "$HOME/android-sdk/platform-tools" >> "$GITHUB_PATH"
           yes | sdkmanager --licenses || true
           sdkmanager "platforms;android-36" "build-tools;36.0.0" "platform-tools"
 
       - name: 安装 Gradle 8.10.2
         run: |
-          wget -q "https://services.gradle.org/distributions/gradle-8.10.2-bin.zip" -O /tmp/gradle.zip
-          sudo mkdir -p /opt/gradle
-          sudo unzip -q /tmp/gradle.zip -d /opt/gradle/
-          echo "/opt/gradle/gradle-8.10.2/bin" >> $GITHUB_PATH
+          cd /tmp
+          curl -sL "https://services.gradle.org/distributions/gradle-8.10.2-bin.zip" -o gradle.zip
+          python3 -c "import zipfile; zipfile.ZipFile('gradle.zip').extractall('$HOME/')"
+          echo "$HOME/gradle-8.10.2/bin" >> "$GITHUB_PATH"
           gradle --version
 
       - name: 生成 gradlew 包装器
