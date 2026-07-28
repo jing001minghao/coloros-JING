@@ -20,62 +20,68 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
-      - name: 定位项目根目录
-        id: locate
+      - name: 构建 APK
         run: |
-          SETTINGS=$(find "$GITHUB_WORKSPACE" -name "settings.gradle.kts" -type f | head -1)
-          if [ -z "$SETTINGS" ]; then
-            echo "未找到 settings.gradle.kts"
-            exit 1
+          set -eu
+
+          # 1. 定位项目根目录（适应嵌套文件夹等各种情况）
+          PROJECT_ROOT="."
+          FOUND=$(find . -name "settings.gradle.kts" -type f -print -quit)
+          [ -n "$FOUND" ] && PROJECT_ROOT=$(dirname "$FOUND")
+          echo "==> 项目根目录: $PROJECT_ROOT"
+          cd "$PROJECT_ROOT"
+
+          # 2. 下载 Android SDK（只用 curl + python3，Runner 100% 预装）
+          SDK_ROOT="$HOME/android-sdk"
+          if [ ! -f "$SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" ]; then
+            echo "==> 安装 Android cmdline-tools..."
+            mkdir -p "$SDK_ROOT/cmdline-tools"
+            curl -fsSL "https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip" \
+              -o /tmp/sdk.zip
+            python3 -c "import zipfile; zipfile.ZipFile('/tmp/sdk.zip').extractall('$SDK_ROOT/cmdline-tools')"
+            mv "$SDK_ROOT/cmdline-tools/cmdline-tools" "$SDK_ROOT/cmdline-tools/latest"
+            chmod -R +x "$SDK_ROOT/cmdline-tools/latest/bin"
           fi
-          PROJECT_ROOT=$(dirname "$SETTINGS")
-          echo "PROJECT_ROOT=$PROJECT_ROOT" >> "$GITHUB_ENV"
-          echo "项目根目录: $PROJECT_ROOT"
+          export ANDROID_HOME="$SDK_ROOT"
+          export PATH="$SDK_ROOT/cmdline-tools/latest/bin:$PATH"
 
-      - name: 安装 Android SDK
-        working-directory: ${{ env.PROJECT_ROOT }}
-        run: |
-          mkdir -p "$HOME/android-sdk/cmdline-tools"
-          cd /tmp
-          curl -sL "https://dl.google.com/android/repository/commandlinetools-linux-13114758_latest.zip" -o cmdtools.zip
-          python3 -c "import zipfile; zipfile.ZipFile('cmdtools.zip').extractall('$HOME/android-sdk/cmdline-tools')"
-          mv "$HOME/android-sdk/cmdline-tools/cmdline-tools" "$HOME/android-sdk/cmdline-tools/latest"
-          chmod -R +x "$HOME/android-sdk/cmdline-tools/latest/bin/"
+          # 3. 安装 Android 平台 & 构建工具（仅首次）
+          if [ ! -d "$ANDROID_HOME/platforms/android-36" ]; then
+            echo "==> 安装 SDK platforms & build-tools..."
+            yes | sdkmanager --sdk_root="$ANDROID_HOME" --licenses || true
+            sdkmanager --sdk_root="$ANDROID_HOME" \
+              "platforms;android-36" "build-tools;36.0.0" "platform-tools"
+          fi
 
-          export PATH="$HOME/android-sdk/cmdline-tools/latest/bin:$HOME/android-sdk/platform-tools:$PATH"
-          export ANDROID_HOME="$HOME/android-sdk"
-          echo "ANDROID_HOME=$HOME/android-sdk" >> "$GITHUB_ENV"
-          echo "$HOME/android-sdk/cmdline-tools/latest/bin" >> "$GITHUB_PATH"
-          echo "$HOME/android-sdk/platform-tools" >> "$GITHUB_PATH"
+          # 4. 下载 Gradle
+          GRADLE_HOME="$HOME/gradle-8.10.2"
+          if [ ! -x "$GRADLE_HOME/bin/gradle" ]; then
+            echo "==> 安装 Gradle 8.10.2..."
+            curl -fsSL "https://services.gradle.org/distributions/gradle-8.10.2-bin.zip" \
+              -o /tmp/gradle.zip
+            python3 -c "import zipfile,os; os.makedirs('$HOME',exist_ok=True); zipfile.ZipFile('/tmp/gradle.zip').extractall('$HOME')"
+            chmod -R +x "$GRADLE_HOME/bin"
+          fi
+          export PATH="$GRADLE_HOME/bin:$PATH"
 
-          yes | sdkmanager --licenses || true
-          sdkmanager "platforms;android-36" "build-tools;36.0.0" "platform-tools"
-
-      - name: 安装 Gradle 8.10.2
-        working-directory: ${{ env.PROJECT_ROOT }}
-        run: |
-          cd /tmp
-          curl -sL "https://services.gradle.org/distributions/gradle-8.10.2-bin.zip" -o gradle.zip
-          python3 -c "import zipfile; zipfile.ZipFile('gradle.zip').extractall('$HOME/')"
-          chmod -R +x "$HOME/gradle-8.10.2/bin/"
-
-          export PATH="$HOME/gradle-8.10.2/bin:$PATH"
-          echo "$HOME/gradle-8.10.2/bin" >> "$GITHUB_PATH"
-
+          # 5. 编译
+          echo "==> Gradle 版本:"
           gradle --version
 
-      - name: 生成 gradlew 包装器
-        working-directory: ${{ env.PROJECT_ROOT }}
-        run: gradle wrapper --gradle-version 8.10.2
+          echo "==> 生成 gradle wrapper..."
+          gradle wrapper --gradle-version 8.10.2
 
-      - name: 编译 Debug APK
-        working-directory: ${{ env.PROJECT_ROOT }}
-        run: ./gradlew assembleDebug --no-daemon --stacktrace
+          echo "==> 构建 APK..."
+          ./gradlew assembleDebug --no-daemon --stacktrace \
+            "-Dorg.gradle.java.home=$JAVA_HOME" \
+            --build-cache
 
+          echo "==> 产物列表:"
+          find . -name "*.apk" -ls
       - name: 上传 APK
         uses: actions/upload-artifact@v4
         with:
           name: ColorOSJing-debug-apk
-          path: ${{ env.PROJECT_ROOT }}/app/build/outputs/apk/debug/*.apk
+          path: app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
           retention-days: 30
